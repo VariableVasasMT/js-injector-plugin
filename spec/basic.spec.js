@@ -163,6 +163,9 @@ describe('HtmlWebpackPlugin', () => {
   it('should pass through loader errors', done => {
     testHtmlPlugin({
       mode: 'production',
+      optimization: {
+        emitOnErrors: true
+      },
       entry: {
         app: path.join(__dirname, 'fixtures/index.js')
       },
@@ -2018,6 +2021,9 @@ describe('HtmlWebpackPlugin', () => {
       output: {
         path: OUTPUT_DIR,
         filename: 'index_bundle.js'
+      },
+      optimization: {
+        emitOnErrors: true
       },
       plugins: [
         new HtmlWebpackPlugin({
