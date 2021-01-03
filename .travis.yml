@@ -5,10 +5,6 @@ node_js:
   - 10.13.0
 env:
   - WEBPACK_CORE=5
-jobs:
-  exclude:
-  - node_js: 10.13.0
-    env: WEBPACK_CORE=next
 before_install:
   - stty columns 120
 install:
