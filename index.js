@@ -22,23 +22,24 @@ const { createHtmlTagObject, htmlTagObjectToString, HtmlTagArray } = require('./
 const prettyError = require('./lib/errors.js');
 const chunkSorter = require('./lib/chunksorter.js');
 const getHtmlWebpackPluginHooks = require('./lib/hooks.js').getHtmlWebpackPluginHooks;
+const createWC = require('./lib/webcomponentization.js');
 const { assert } = require('console');
 
 const fsReadFileAsync = promisify(fs.readFile);
 
-class HtmlWebpackPlugin {
+class JSInjectorPlugin {
   /**
    * @param {HtmlWebpackOptions} [options]
    */
   constructor (options) {
     /** @type {HtmlWebpackOptions} */
     this.userOptions = options || {};
-    this.version = HtmlWebpackPlugin.version;
+    this.version = JSInjectorPlugin.version;
   }
 
   apply (compiler) {
     // Wait for configuration preset plugions to apply all configure webpack defaults
-    compiler.hooks.initialize.tap('HtmlWebpackPlugin', () => {
+    compiler.hooks.initialize.tap('JSInjectorPlugin', () => {
       const userOptions = this.userOptions;
 
       // Default options
@@ -149,7 +150,7 @@ class HtmlWebpackPlugin {
  * apply is called by the webpack main compiler during the start phase
  * @param {import('webpack').Compiler} compiler
  * @param {ProcessedHtmlWebpackOptions} options
- * @param {HtmlWebpackPlugin} plugin
+ * @param {JSInjectorPlugin} plugin
  */
 function hookIntoCompiler (compiler, options, plugin) {
   const webpack = compiler.webpack;
@@ -205,15 +206,27 @@ function hookIntoCompiler (compiler, options, plugin) {
     };
   }
 
-  compiler.hooks.thisCompilation.tap('HtmlWebpackPlugin',
+  compiler.hooks.thisCompilation.tap('JSInjectorPlugin',
     /**
        * Hook into the webpack compilation
        * @param {WebpackCompilation} compilation
       */
     (compilation) => {
+      compilation.hooks.processAssets.tapAsync({
+        name:'JSInjectorPlugin',
+        stage: webpack.Compilation.PROCESS_ASSETS_STAGE_DERIVED
+      }, (compilationAssets, callback) => {
+        console.log("\n++++++++++++++++++++++++++++++++++++++++++++++++");
+        // console.table(compilationAssets);
+        Object.keys(compilationAssets).forEach((a) => {
+          console.log(a, compilationAssets[a]);
+        });
+        console.log("++++++++++++++++++++++++++++++++++++++++++++++++");
+        callback();
+      });
       compilation.hooks.processAssets.tapAsync(
         {
-          name: 'HtmlWebpackPlugin',
+          name: 'JSInjectorPlugin',
           stage:
           /**
            * Generate the html after minification and dev tooling is done
@@ -348,24 +361,17 @@ function hookIntoCompiler (compiler, options, plugin) {
 
           const emitHtmlPromise = injectedHtmlPromise
           // Allow plugins to change the html after assets are injected
-            .then((html) => {
-              const pluginArgs = { html, plugin: plugin, outputName: childCompilationOutputName };
-              return getHtmlWebpackPluginHooks(compilation).beforeEmit.promise(pluginArgs)
-                .then(result => result.html);
-            })
-            .catch(err => {
-              // In case anything went wrong the promise is resolved
-              // with the error message and an error is logged
-              compilation.errors.push(prettyError(err, compiler.context).toString());
-              return options.showErrors ? prettyError(err, compiler.context).toHtml() : 'ERROR';
-            })
             .then(html => {
               // Allow to use [templatehash] as placeholder for the html-webpack-plugin name
               // See also https://survivejs.com/webpack/optimizing/adding-hashes-to-filenames/
               // From https://github.com/webpack-contrib/extract-text-webpack-plugin/blob/8de6558e33487e7606e7cd7cb2adc2cccafef272/src/index.js#L212-L214
               const finalOutputName = childCompilationOutputName.replace(/\[(?:(\w+):)?templatehash(?::([a-z]+\d*))?(?::(\d+))?\]/ig, (_, hashType, digestType, maxLength) => {
                 return loaderUtils.getHashDigest(Buffer.from(html, 'utf8'), hashType, digestType, parseInt(maxLength, 10));
-              });
+              }).replace(".html", ".tmpl.js");
+
+              console.log("<<=================================================>>");
+              console.table(finalOutputName);
+              console.log("<<=================================================>>");
               // Add the evaluated html code to the webpack assets
               compilation.emitAsset(finalOutputName, new webpack.sources.RawSource(html, false));
               previousEmittedAssets.push({ name: finalOutputName, html });
@@ -480,11 +486,8 @@ function hookIntoCompiler (compiler, options, plugin) {
     if (typeof html !== 'string') {
       return Promise.reject(new Error('Expected html to be a string but got ' + JSON.stringify(html)));
     }
-    const htmlAfterInjection = options.inject
-      ? injectAssetsIntoHtml(html, assets, assetTags)
-      : html;
-    const htmlAfterMinification = minifyHtml(htmlAfterInjection);
-    return Promise.resolve(htmlAfterMinification);
+    const htmlAfterInjection = injectAssetsIntoHtml(html, assets, assetTags);
+    return Promise.resolve(htmlAfterInjection);
   }
 
   /*
@@ -498,7 +501,7 @@ function hookIntoCompiler (compiler, options, plugin) {
     filename = path.resolve(compilation.compiler.context, filename);
     return fsReadFileAsync(filename)
       .then(source => new webpack.sources.RawSource(source, false))
-      .catch(() => Promise.reject(new Error('HtmlWebpackPlugin: could not load file ' + filename)))
+      .catch(() => Promise.reject(new Error('JSInjectorPlugin: could not load file ' + filename)))
       .then(rawSource => {
         const basename = path.basename(filename);
         compilation.fileDependencies.add(filename);
@@ -887,47 +890,20 @@ function hookIntoCompiler (compiler, options, plugin) {
    * @returns {string}
    */
   function injectAssetsIntoHtml (html, assets, assetTags) {
-    const htmlRegExp = /(<html[^>]*>)/i;
-    const headRegExp = /(<\/head\s*>)/i;
-    const bodyRegExp = /(<\/body\s*>)/i;
     const body = assetTags.bodyTags.map((assetTagObject) => htmlTagObjectToString(assetTagObject, options.xhtml));
     const head = assetTags.headTags.map((assetTagObject) => htmlTagObjectToString(assetTagObject, options.xhtml));
 
-    if (body.length) {
-      if (bodyRegExp.test(html)) {
-        // Append assets to body element
-        html = html.replace(bodyRegExp, match => body.join('') + match);
-      } else {
-        // Append scripts to the end of the file if no <body> element exists:
-        html += body.join('');
-      }
-    }
+    console.table(assets);
+    console.table(head);
+    console.table(body);
 
-    if (head.length) {
-      // Create a head tag if none exists
-      if (!headRegExp.test(html)) {
-        if (!htmlRegExp.test(html)) {
-          html = '<head></head>' + html;
-        } else {
-          html = html.replace(htmlRegExp, match => match + '<head></head>');
-        }
-      }
 
-      // Append assets to head element
-      html = html.replace(headRegExp, match => head.join('') + match);
-    }
-
-    // Inject manifest into the opening html tag
-    if (assets.manifest) {
-      html = html.replace(/(<html[^>]*)(>)/i, (match, start, end) => {
-        // Append the manifest only if no manifest was specified
-        if (/\smanifest\s*=/.test(match)) {
-          return match;
-        }
-        return start + ' manifest="' + assets.manifest + '"' + end;
-      });
-    }
-    return html;
+    return `
+      var headTag = document.getElementsByTagName('head').item(0);
+      headTag.innerHTML = headTag.innerHTML + '${head.join(' ')}';
+      var bodyTag = document.getElementsByTagName('body').item(0);
+      bodyTag.innerHTML = bodyTag.innerHTML + '${body.join(' ')}';
+    `;
   }
 
   /**
@@ -1069,7 +1045,7 @@ function templateParametersGenerator (compilation, assets, assetTags, options) {
   return {
     compilation: compilation,
     webpackConfig: compilation.options,
-    htmlWebpackPlugin: {
+    jSInjectorPlugin: {
       tags: assetTags,
       files: assets,
       options: options
@@ -1081,14 +1057,37 @@ function templateParametersGenerator (compilation, assets, assetTags, options) {
 /**
  * The major version number of this plugin
  */
-HtmlWebpackPlugin.version = 5;
+JSInjectorPlugin.version = 5;
 
 /**
  * A static helper to get the hooks for this plugin
  *
  * Usage: HtmlWebpackPlugin.getHooks(compilation).HOOK_NAME.tapAsync('YourPluginName', () => { ... });
  */
-HtmlWebpackPlugin.getHooks = getHtmlWebpackPluginHooks;
-HtmlWebpackPlugin.createHtmlTagObject = createHtmlTagObject;
+JSInjectorPlugin.getHooks = getHtmlWebpackPluginHooks;
+JSInjectorPlugin.createHtmlTagObject = createHtmlTagObject;
+JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath }) => {
+  let webComponentConfig = {
+    ...mergedConfig,
+  };
 
-module.exports = HtmlWebpackPlugin;
+  webComponentConfig = {
+    ...webComponentConfig,
+    entry: wcpath,
+    output: {
+      ...mergedConfig.output,
+      outputPath,
+    },
+    plugins: [
+      ...mergedConfig.plugins,
+      new JSInjectorPlugin({
+        inject: true,
+      }),
+    ],
+  };
+  return [webComponentConfig, mergedConfig];
+};
+
+JSInjectorPlugin.createWC = createWC;
+
+module.exports = JSInjectorPlugin;

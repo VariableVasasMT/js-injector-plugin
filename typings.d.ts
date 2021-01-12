@@ -185,7 +185,7 @@ declare namespace HtmlWebpackPlugin {
    */
   interface TemplateParameter {
     compilation: any;
-    htmlWebpackPlugin: {
+    jSInjectorPlugin: {
       tags: {
         headTags: HtmlTagObject[];
         bodyTags: HtmlTagObject[];
