@@ -1076,7 +1076,7 @@ JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath }) => {
     entry: wcpath,
     output: {
       ...mergedConfig.output,
-      outputPath,
+      output: outputPath,
     },
     plugins: [
       ...mergedConfig.plugins,

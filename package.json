@@ -1,6 +1,6 @@
 {
   "name": "js-injector-plugin",
-  "version": "4.5.1",
+  "version": "4.5.2",
   "license": "MIT",
   "description": "Adopted from https://github.com/jantimon/html-webpack-plugin, hence she/they/he are the author!",
   "author": "Jan Nicklas <j.nicklas@me.com> (https://github.com/jantimon)",
