@@ -16,13 +16,13 @@ const _ = require('lodash');
 const path = require('path');
 const loaderUtils = require('loader-utils');
 const { CachedChildCompilation } = require('./lib/cached-child-compiler');
+const ModuleFederationPlugin = require('webpack').container.ModuleFederationPlugin;
 
-const { createHtmlTagObject, htmlTagObjectToString, HtmlTagArray } = require('./lib/html-tags');
+const { createHtmlTagObject, htmlTagObjectToString, HtmlTagArray, createAsyncLoaders } = require('./lib/html-tags');
 
 const prettyError = require('./lib/errors.js');
 const chunkSorter = require('./lib/chunksorter.js');
 const getHtmlWebpackPluginHooks = require('./lib/hooks.js').getHtmlWebpackPluginHooks;
-const createWC = require('./lib/webcomponentization.js');
 const { assert } = require('console');
 
 const fsReadFileAsync = promisify(fs.readFile);
@@ -212,18 +212,6 @@ function hookIntoCompiler (compiler, options, plugin) {
        * @param {WebpackCompilation} compilation
       */
     (compilation) => {
-      compilation.hooks.processAssets.tapAsync({
-        name:'JSInjectorPlugin',
-        stage: webpack.Compilation.PROCESS_ASSETS_STAGE_DERIVED
-      }, (compilationAssets, callback) => {
-        console.log("\n++++++++++++++++++++++++++++++++++++++++++++++++");
-        // console.table(compilationAssets);
-        Object.keys(compilationAssets).forEach((a) => {
-          console.log(a, compilationAssets[a]);
-        });
-        console.log("++++++++++++++++++++++++++++++++++++++++++++++++");
-        callback();
-      });
       compilation.hooks.processAssets.tapAsync(
         {
           name: 'JSInjectorPlugin',
@@ -369,9 +357,6 @@ function hookIntoCompiler (compiler, options, plugin) {
                 return loaderUtils.getHashDigest(Buffer.from(html, 'utf8'), hashType, digestType, parseInt(maxLength, 10));
               }).replace(".html", ".tmpl.js");
 
-              console.log("<<=================================================>>");
-              console.table(finalOutputName);
-              console.log("<<=================================================>>");
               // Add the evaluated html code to the webpack assets
               compilation.emitAsset(finalOutputName, new webpack.sources.RawSource(html, false));
               previousEmittedAssets.push({ name: finalOutputName, html });
@@ -892,17 +877,14 @@ function hookIntoCompiler (compiler, options, plugin) {
   function injectAssetsIntoHtml (html, assets, assetTags) {
     const body = assetTags.bodyTags.map((assetTagObject) => htmlTagObjectToString(assetTagObject, options.xhtml));
     const head = assetTags.headTags.map((assetTagObject) => htmlTagObjectToString(assetTagObject, options.xhtml));
-
     console.table(assets);
-    console.table(head);
-    console.table(body);
+
+
 
 
     return `
-      var headTag = document.getElementsByTagName('head').item(0);
-      headTag.innerHTML = headTag.innerHTML + '${head.join(' ')}';
-      var bodyTag = document.getElementsByTagName('body').item(0);
-      bodyTag.innerHTML = bodyTag.innerHTML + '${body.join(' ')}';
+      var createAsyncLoaders = ${createAsyncLoaders.toString()};
+      createAsyncLoaders(window, document, ${JSON.stringify(assetTags)});
     `;
   }
 
@@ -1066,7 +1048,7 @@ JSInjectorPlugin.version = 5;
  */
 JSInjectorPlugin.getHooks = getHtmlWebpackPluginHooks;
 JSInjectorPlugin.createHtmlTagObject = createHtmlTagObject;
-JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath }) => {
+JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, singleConfig }) => {
   let webComponentConfig = {
     ...mergedConfig,
   };
@@ -1076,7 +1058,7 @@ JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath }) => {
     entry: wcpath,
     output: {
       ...mergedConfig.output,
-      output: outputPath,
+      path: outputPath,
     },
     plugins: [
       ...mergedConfig.plugins,
@@ -1085,9 +1067,7 @@ JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath }) => {
       }),
     ],
   };
-  return [webComponentConfig, mergedConfig];
+  return singleConfig ? webComponentConfig : [webComponentConfig, mergedConfig];
 };
-
-JSInjectorPlugin.createWC = createWC;
 
 module.exports = JSInjectorPlugin;
