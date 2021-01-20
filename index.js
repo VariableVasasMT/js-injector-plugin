@@ -1048,7 +1048,7 @@ JSInjectorPlugin.version = 5;
  */
 JSInjectorPlugin.getHooks = getHtmlWebpackPluginHooks;
 JSInjectorPlugin.createHtmlTagObject = createHtmlTagObject;
-JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, singleConfig }) => {
+JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, publicSubPath }) => {
   let webComponentConfig = {
     ...mergedConfig,
   };
@@ -1059,6 +1059,7 @@ JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, singleC
     output: {
       ...mergedConfig.output,
       path: outputPath,
+      publicPath: mergedConfig.output.publicPath + publicSubPath
     },
     plugins: [
       ...mergedConfig.plugins,
@@ -1067,7 +1068,7 @@ JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, singleC
       }),
     ],
   };
-  return singleConfig ? webComponentConfig : [webComponentConfig, mergedConfig];
+  return [webComponentConfig, mergedConfig];
 };
 
 module.exports = JSInjectorPlugin;
