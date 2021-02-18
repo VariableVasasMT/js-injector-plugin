@@ -1048,14 +1048,14 @@ JSInjectorPlugin.version = 5;
  */
 JSInjectorPlugin.getHooks = getHtmlWebpackPluginHooks;
 JSInjectorPlugin.createHtmlTagObject = createHtmlTagObject;
-JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, publicSubPath }) => {
+JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, publicSubPath, enableDev }) => {
   let webComponentConfig = {
     ...mergedConfig,
   };
-
   webComponentConfig = {
     ...webComponentConfig,
     entry: wcpath,
+    devServer: undefined,
     output: {
       ...mergedConfig.output,
       path: outputPath,
@@ -1068,6 +1068,12 @@ JSInjectorPlugin.generateWCConfig = (mergedConfig, { wcpath, outputPath, publicS
       }),
     ],
   };
+
+  if(enableDev) {
+    console.log('\x1b[45m\x1b[33m%s\x1b[0m', 'YOU ARE USING DEV WITH JS INJECTOR CONFIG!');
+    webComponentConfig.devServer = mergedConfig.devServer;
+    delete mergedConfig.devServer
+  }
   return [webComponentConfig, mergedConfig];
 };
 
